@@ -1,0 +1,86 @@
+--
+
+entity tt10 is
+
+generic (PHYSICAL_PIN_MAP : string := " TQFP ")  ;
+
+port (
+    ui    : in    bit_vector(0 to 7);
+    uo    : out   bit_vector(0 to 7);
+    uio   : inout bit_vector(0 to 4);
+    tck   : in    bit;
+    tms   : in    bit;
+    tdi   : in    bit;
+    tdo   : out   bit;
+    clk   : in    bit;
+    rst_n : in    bit
+);
+
+use STD_1149_1_1994.all;
+
+attribute COMPONENT_CONFORMANCE of tt10 : entity is " STD_1149_1_1993 ";
+
+-- FIXME: physical pin map
+
+attribute TAP_SCAN_IN of tdi : signal is true ;
+attribute TAP_SCAN_OUT of tdo : signal is true ;
+attribute TAP_SCAN_MODE of tms : signal is true ;
+attribute TAP_SCAN_CLOCK of tck : signal is (8.0e6, BOTH) ;
+
+attribute INSTRUCTION_LENGTH of tt10 : entity is 4;
+
+attribute INSTRUCTION_OPCODE of tt10 : entity is
+    " IDCODE  ( 0000 )," &
+    " SAMPLE  ( 0001 )," &
+    " PRELOAD ( 0001 )," &
+    " EXTEST  ( 0010 )," &
+    " INTEST  ( 0011 )," &
+    " CLAMP   ( 0100 )," &
+    " BYPASS  ( 1111 )";
+
+attribute INSTRUCTION_CAPTURE of tt10 : entity is " XX01 ";
+
+attribute IDCODE_REGISTER of tt10 : entity is
+    "0011" &
+    "0000000000101010" &
+    "11101111110" &
+    "1";
+    
+attribute REGISTER_ACCESS of tt10 : entity is
+    "BYPASS (BYPASS,CLAMP)," &
+    "DEVICE_ID (IDCODE)," &
+    "BOUNDARY (SAMPLE,PRELOAD,EXTEST,INTEST)";
+
+attribute BOUNDARY_LENGTH of tt10 : entity is 26;
+
+attribute BOUNDARY_REGISTER of tt10 : entity is
+-- num  cell   port        func     safe  [ccell  dis  rslt]
+
+"   25  (BC_1, uo(7),      output2, 0)," &
+"   24  (BC_1, uo(6),      output2, 0)," &
+"   23  (BC_1, uo(5),      output2, 0)," &
+"   22  (BC_1, uo(4),      output2, 0)," &
+"   21  (BC_1, uo(3),      output2, 0)," &
+"   20  (BC_1, uo(2),      output2, 0)," &
+"   19  (BC_1, uo(1),      output2, 0)," &
+"   18  (BC_1, uo(0),      output2, 0)," &
+"   17  (BC_1, uio(3),     bidir,   X,     13,     0,   Z)," &
+"   16  (BC_1, uio(2),     bidir,   X,     12,     0,   Z)," &
+"   15  (BC_1, uio(1),     bidir,   X,     11,     0,   Z)," &
+"   14  (BC_1, uio(0),     bidir,   X,     10,     0,   Z)," &
+"   13  (BC_1, *,          control, 0)," &
+"   12  (BC_1, *,          control, 0)," &
+"   11  (BC_1, *,          control, 0)," &
+"   10  (BC_1, *,          control, 0)," &
+"    9  (BC_1, ui(7),      input,   X)," &
+"    8  (BC_1, ui(6),      input,   X)," &
+"    7  (BC_1, ui(5),      input,   X)," &
+"    6  (BC_1, ui(4),      input,   X)," &
+"    5  (BC_1, ui(3),      input,   X)," &
+"    4  (BC_1, ui(2),      input,   X)," &
+"    3  (BC_1, ui(1),      input,   X)," &
+"    2  (BC_1, ui(0),      input,   X)," &
+"    1  (BC_1, rst_n,      input,   X)," &
+"    0  (BC_1, clk,        input,   X)";
+
+end tt10;

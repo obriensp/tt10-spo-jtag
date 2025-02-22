@@ -6,6 +6,9 @@ SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
 SRC_DIR = $(PWD)/../src
 PROJECT_SOURCES = \
+	boundary_scan_register.v \
+	inner_project.v \
+	jtag_tap_sm.v \
 	project.v \
 	seven_segment.v
 
