@@ -5,10 +5,11 @@ import cocotb
 from cocotb.binary import BinaryValue
 from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, Timer
-from jtag import JTAG
-
 from enum import Enum
+from jtag import JTAG
+import os
 
+is_gate_level = os.environ.get('GATES') == 'yes'
 
 segments_map = {
     63  : 0x0,
@@ -61,7 +62,7 @@ def create_jtag(dut):
     return JTAG(dut.uio_in[4], dut.uio_in[5], dut.uio_in[6], dut.uio_out[7])
 
 
-@cocotb.test()
+@cocotb.test(skip=is_gate_level)
 async def test_inner_project(dut):
     await reset_dut(dut)
 
@@ -93,7 +94,7 @@ async def test_inner_project(dut):
         assert decoded == i
 
 
-@cocotb.test()
+@cocotb.test(skip=is_gate_level)
 async def test_ir(dut):
     await reset_dut(dut)
 
