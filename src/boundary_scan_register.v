@@ -48,10 +48,10 @@ module boundary_scan_register(
   wire control_input  = ir_intest_i;
 
   assign capture_data_o = {
-    ir_extest_i ? 8'b0 : sys_uo_out_i,
-    ir_extest_i ? 4'b0 : sys_uio_out_i, // FIXME: bidir
-    ir_extest_i ? 4'b0 : sys_uio_oe_i,
-    ir_intest_i ? 8'b0 : pin_ui_in_i,
+    ir_extest_i ? 8'b0         : sys_uo_out_i,
+    ir_extest_i ? pin_uio_in_i : sys_uio_out_i,
+    ir_extest_i ? 4'b0         : sys_uio_oe_i,
+    ir_intest_i ? 8'b0         : pin_ui_in_i,
     2'b11 // FIXME: rst_n and clk
   };
 

@@ -30,7 +30,6 @@ segments_map = {
     113 : 0xF,
 }
 
-
 W_IR = 4
 W_BSR = 26
 
@@ -59,14 +58,18 @@ async def reset_dut(dut):
 
 
 def create_jtag(dut):
-    return JTAG(dut.uio_in[4], dut.uio_in[5], dut.uio_in[6], dut.uio_out[7])
+    return JTAG(tck=dut.uio_in[4],
+                tms=dut.uio_in[5],
+                tdi=dut.uio_in[6],
+                tdo=dut.uio_out[7],
+                tdo_oe=dut.uio_oe[7])
 
 
-@cocotb.test(skip=is_gate_level)
+@cocotb.test()
 async def test_inner_project(dut):
     await reset_dut(dut)
 
-    inner = dut.user_project.inner
+    inner = None if is_gate_level else dut.user_project.inner
 
     # test counter display; run for 32 cycles to test overflow of 4-bit counter
     dut._log.info('Testing counter')
@@ -74,8 +77,9 @@ async def test_inner_project(dut):
         await ClockCycles(dut.clk, 1)
         expected_counter = i % 16
 
-        # check the counter register
-        assert inner.counter.value == expected_counter
+        if not is_gate_level:
+            # check the counter register
+            assert inner.counter.value == expected_counter
 
         # check the 7-segment output
         segments = BinaryValue(value=dut.uo_out.value.binstr, n_bits=8, bigEndian=False)
@@ -94,20 +98,22 @@ async def test_inner_project(dut):
         assert decoded == i
 
 
-@cocotb.test(skip=is_gate_level)
+@cocotb.test()
 async def test_ir(dut):
     await reset_dut(dut)
 
     jtag = create_jtag(dut)
     await jtag.ensure_reset()
 
-    tap = dut.user_project.tap_sm
+    tap = None if is_gate_level else dut.user_project.tap_sm
 
     # test all 16 possible IR values
     for ir in range(16):
         captured = await jtag.shift_ir(BinaryValue(value=ir, n_bits=4, bigEndian=False))
-        assert tap.ir_q.value == ir
         assert (captured.integer & 0x3) == 0x1
+
+        if not is_gate_level:
+            assert tap.ir_q.value == ir
 
 
 @cocotb.test()
@@ -165,12 +171,40 @@ async def test_extest(dut):
     # set IR to EXTEST
     await jtag.shift_ir(Instruction.EXTEST.value)
 
+    # NOTE: slice indices for dut.uio_out.value and dut.uio_oe.value are confusing here.
+    # cocotb seems to reverse the endianness between handles and their values, but handles don't support slice indexing
+
     # test all 256 output combinations
     for pattern in range(256):
         await jtag.shift_dr(BinaryValue(value=(pattern << 18), n_bits=W_BSR, bigEndian=False))
         assert dut.uo_out.value == pattern
     
-    # FIXME: test uio
+        # verify uio outputs are disabled
+        assert dut.uio_oe.value[4:7] == 0
+
+    # enable and test output drivers
+    for pattern in range(16):
+        await jtag.shift_dr(BinaryValue(value=(((pattern << 4) | 0xF) << 10), n_bits=W_BSR, bigEndian=False))
+        assert dut.uio_out.value[4:7] == pattern
+    
+        # verify uio outputs are enabled
+        assert dut.uio_oe.value[4:7] == 0xF
+    
+    # disable output drivers and test uio inputs
+    zeros_bsr = BinaryValue(value=0, n_bits=W_BSR, bigEndian=False)
+    await jtag.shift_dr(zeros_bsr)
+
+    for pattern in range(16):
+        pv = BinaryValue(value=pattern, n_bits=4, bigEndian=False)
+        for i in range(4):
+            dut.uio_in[i].value = pv[i].integer
+
+        captured = await jtag.shift_dr(zeros_bsr)
+        assert captured[17:14] == pattern
+    
+        # verify uio outputs are disabled
+        assert dut.uio_oe.value[4:7] == 0
+
 
 
 @cocotb.test()
@@ -189,10 +223,24 @@ async def test_intest(dut):
     # set IR to INTEST
     await jtag.shift_ir(Instruction.INTEST.value)
 
+    # NOTE: slice indices for dut.uio_out.value and dut.uio_oe.value are confusing here.
+    # cocotb seems to reverse the endianness between handles and their values, but handles don't support slice indexing
+
     # test that output pins are all zero
     assert dut.uo_out.value == 0
-    assert dut.uio_out.value == 0
-    assert dut.uio_oe.value == 0
+    assert dut.uio_out.value[4:7] == 0
+    assert dut.uio_oe.value[4:7] == 0
+
+    # drive values onto the output pins
+    await jtag.shift_dr(BinaryValue(value=0xFFFF << 10, n_bits=W_BSR, bigEndian=False))
+
+    # test that output pins are all ones
+    assert dut.uo_out.value == 0xFF
+    assert dut.uio_out.value[4:7] == 0xF
+    assert dut.uio_oe.value[4:7] == 0xF
+
+    # zero out boundary scan register
+    await jtag.shift_dr(BinaryValue(value=0, n_bits=W_BSR, bigEndian=False))
 
     # test that changes to the input portion of the BSR show up in the output (seven segment) portion, but *not* in the actual output pins
     expected_segment = None
@@ -216,8 +264,10 @@ async def test_clamp(dut):
     await jtag.shift_ir(Instruction.SAMPLE.value)
 
     # update boundary scan register
-    test_value = 0x55
-    await jtag.shift_dr(BinaryValue(value=(test_value << 18), n_bits=W_BSR, bigEndian=False))
+    uo_test_value = 0x55
+    uio_test_value = 0xA
+    bsr = (uo_test_value << 18) | (uio_test_value << 14) | (0xF << 10)
+    await jtag.shift_dr(BinaryValue(value=bsr, n_bits=W_BSR, bigEndian=False))
 
     # set IR to CLAMP
     await jtag.shift_ir(Instruction.CLAMP.value)
@@ -227,5 +277,10 @@ async def test_clamp(dut):
     captured = await jtag.shift_dr(pattern)
     assert captured == pattern[30:0] << 1
 
-    # test that P1B has expected value
-    assert dut.uo_out.value == test_value
+    # NOTE: slice indices for dut.uio_out.value and dut.uio_oe.value are confusing here.
+    # cocotb seems to reverse the endianness between handles and their values, but handles don't support slice indexing
+    
+    # test that uo has expected value
+    assert dut.uo_out.value == uo_test_value
+    assert dut.uio_out.value[4:7] == uio_test_value
+    assert dut.uio_oe.value[4:7] == 0xF
